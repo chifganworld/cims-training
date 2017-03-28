@@ -1,0 +1,15 @@
+[Unit]
+Description=Celery Service
+After=network.target
+
+[Service]
+Type=forking
+User=rapidpro
+Group=www-data
+WorkingDirectory=/home/rapidpro/temba
+ExecStart=/home/rapidpro/.virtualenvs/rapidpro/bin/celery multi start default-node handler-node msg-node flow-node -A temba --logfile="/var/log/celery/%%n%%I-rapidpro.log" --pidfile="/var/run/celery-%%n-rapidpro.pid" --time-limit=300 --concurrency=1 -Q:default-node celery -Q:handler-node handler -Q:msg-node msgs -Q:flow-node flows
+ExecStop=/home/rapidpro/.virtualenvs/rapidpro/bin/celery multi stopwait default-node handler-node msg-node flow-node --pidfile="/var/run/celery-%%n-rapidpro.pid"
+ExecReload=/home/rapidpro/.virtualenvs/rapidpro/bin/celery multi restart default-node handler-node msg-node flow-node -A temba --pidfile="/var/run/celery-%%n-rapidpro.pid" --logfile="/var/log/celery/%%n%%I-rapidpro.log" --loglevel="INFO" --time-limit=300 --concurrency=1 -Q:default-node celery -Q:handler-node handler -Q:msg-node msgs -Q:flow-node flows
+
+[Install]
+WantedBy=multi-user.target

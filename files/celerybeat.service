@@ -1,0 +1,13 @@
+[Unit]
+Description=Celery beat for rapidpro
+After=network.target
+
+[Service]
+User=rapidpro
+Group=www-data
+WorkingDirectory=/home/rapidpro/temba
+ExecStart=/home/rapidpro/.virtualenvs/rapidpro/bin/celery beat -A temba --logfile=/var/log/celery/beat-rapidpro.log --pidfile=/var/run/celery-beat-rapidpro.pid
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

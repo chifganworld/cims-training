@@ -1,0 +1,13 @@
+[Unit]
+Description=uWSGI instance to serve rapidpro
+
+[Service]
+ExecStart=/home/rapidpro/.virtualenvs/rapidpro/bin/uwsgi --ini /home/rapidpro/temba/uwsgi.ini --env DJANGO_SETTINGS_MODULE=temba.settings
+Restart=always
+KillSignal=SIGQUIT
+Type=notify
+StandardError=syslog
+NotifyAccess=all
+
+[Install]
+WantedBy=multi-user.target

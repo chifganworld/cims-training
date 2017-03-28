@@ -1,0 +1,16 @@
+[Unit]
+Description=mage Twitter service
+
+[Service]
+User=rapidpro
+Group=www-data
+WorkingDirectory=/home/rapidpro/temba
+ExecStart=java -jar mage.jar server /home/rapidpro/mage/config.yml
+Restart=always
+KillSignal=SIGQUIT
+Type=notify
+StandardError=syslog
+NotifyAccess=all
+
+[Install]
+WantedBy=multi-user.target
