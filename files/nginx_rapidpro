@@ -12,11 +12,11 @@ server {
 
     # static files
     location /sitestatic  {
-        alias /home/rapidpro/app/sitestatic;
+        alias /home/rapidpro/temba/sitestatic;
     }
 
     location /media  {
-        alias /home/rapidpro/app/media;
+        alias /home/rapidpro/temba/media;
     }
 
     location / {
@@ -56,11 +56,11 @@ server {
 
     # static files
     location /sitestatic  {
-        alias /home/rapidpro/app/sitestatic;
+        alias /home/rapidpro/temba/sitestatic;
     }
 
     location /media  {
-        alias /home/rapidpro/app/media;
+        alias /home/rapidpro/temba/media;
     }
 
     location / {

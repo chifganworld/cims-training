@@ -223,10 +223,6 @@ openssl x509 -noout -modulus -in /etc/ssl/certs/rapidpro-self.crt| openssl md5
 openssl rsa -noout -modulus -in /etc/ssl/private/rapidpro-self.key| openssl md5
 ```
 
-## Fichiers de configuration
-
-`git clone https://github.com/rgaudin/cims-training.git ~/src/training`
-
 ## nginx (part1)
 
 * `apt install nginx`
@@ -249,7 +245,7 @@ server {
 
     # static files
     location /sitestatic  {
-        alias /home/rapidpro/app/sitestatic;
+        alias /home/rapidpro/temba/sitestatic;
     }
 
     location / {
@@ -299,6 +295,7 @@ server {
 * `npm install -g less coffee-script bower`
 * `ln -s /usr/bin/nodejs /usr/bin/node`
 * create user `useradd -g www-data -m -N -s /bin/bash rapidpro`
+* `cp -r /home/super/.ssh /home/rapidpro/`
 * `chown -R rapidpro:www-data /home/rapidpro/.ssh/`
 
 **En tant que `rapidpro`** (`su - rapidpro`)
@@ -317,6 +314,13 @@ source ~/.virtualenvs/rapidpro/bin/activated
 cd ~/temba"
 ```
 * exit
+
+## Fichiers de configuration
+
+`git clone https://github.com/rgaudin/cims-training.git ~/src/training`
+
+## temba (en tant que `rapidpro`)
+
 * `pip install -r pip-freeze.txt --allow-all-external`
 * `pip install -U --force numpy requests-oauthlib uwsgi django-nose`
 * copy `temba/settings.py`
