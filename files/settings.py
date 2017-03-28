@@ -63,7 +63,7 @@ TWITTER_API_SECRET = '-'
 IP_ADDRESSES = ('192.168.60.2')
 
 if TESTING:
-    INSTALLED_APPS = INSTALLED_APPS + ('django_nose', 'storages')
+    INSTALLED_APPS = INSTALLED_APPS + ('storages')
     MIDDLEWARE_CLASSES = ('temba.middleware.ExceptionMiddleware',) + MIDDLEWARE_CLASSES
 
     CELERY_ALWAYS_EAGER = True

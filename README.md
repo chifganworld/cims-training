@@ -249,7 +249,7 @@ server {
     }
 
     location / {
-        proxy_pass        http://localhost:8001;
+        proxy_pass        http://localhost:3030;
         proxy_read_timeout 300s;
         proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
     }
@@ -266,7 +266,7 @@ server {
     add_header Strict-Transport-Security max-age=31536000;
 
     location / {
-        proxy_pass        http://localhost:8001;
+        proxy_pass        http://localhost:3030;
         proxy_read_timeout 300s;
 
         proxy_redirect     off;
@@ -330,6 +330,7 @@ cd ~/temba"
 * `./manage.py collectstatic --noinput`
 * `mkdir -p ~/{sitestatic,media}`
 * `chmod 755 ~/{sitestatic,media}`
+* `./manage.py createsuperuser --username root` (admin)
 * copy `uwsgi.ini`
 * test `./manage.py runserver 0.0.0.0:8000` via `http://192.168.60.2:8000`
 * copy `/etc/systemd/system/rapidpro.service`
@@ -343,7 +344,7 @@ cd ~/temba"
 ```
 #root /home/super;
 #autoindex on;
-proxy_pass        http://localhost:8001;
+proxy_pass        http://localhost:3030;
 ```
 
 ## GIS data
