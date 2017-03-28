@@ -307,10 +307,10 @@ server {
 git clone https://github.com/rapidpro/rapidpro.git src/temba-`date +"%s"` --depth 1
 ```
 * `ln -s src/temba* temba`
-* `~/.bashrc`:
+* `vim ~/.bashrc`:
 
 ```
-source ~/.virtualenvs/rapidpro/bin/activated
+source ~/.virtualenvs/rapidpro/bin/activate
 cd ~/temba"
 ```
 * exit
@@ -322,7 +322,9 @@ cd ~/temba"
 ## temba (en tant que `rapidpro`)
 
 * `pip install -r pip-freeze.txt --allow-all-external`
-* `pip install -U --force numpy requests-oauthlib uwsgi django-nose`
+* `pip install -U pip`
+* `pip install -U setuptools`
+* `pip install uwsgi`
 * copy `temba/settings.py`
 * `./manage.py migrate --noinput`
 * `./manage.py collectstatic --noinput`
