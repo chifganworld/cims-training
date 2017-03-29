@@ -91,6 +91,7 @@ SEND_WEBHOOKS = not TESTING
 SEND_EMAILS = not TESTING
 
 STATIC_ROOT = "/home/rapidpro/sitestatic"
+COMPRESS_ROOT = STATIC_ROOT
 MEDIA_ROOT = "/home/rapidpro/media"
 
 DEFAULT_DOMAIN = ALLOWED_HOSTS[-1]
