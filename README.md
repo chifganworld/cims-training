@@ -363,20 +363,21 @@ cd ~/temba
 
 ## WebUI Configuration
 
-* Log onto https://rapidpro (root / admin)
-* https://rapidpro/org/grant/
-* https://rapidpro/org/home/
-* Location -> Tunisie
+* Log into `https://192.168.60.2/org/grant/` with `root`/`admin` credentials
+* Create Organization Owner account
+* Go to `https://192.168.60.2/org/home/` and change Location to **Tunisie**.
+* Log out and login with newly created account.
 
 ## Celery
 
 ```
-mkdir -p /var/log/celery/
-chgrp www-data /var/log/celery/
-chmod 775 /var/log/celery/
+mkdir -p /var/log/rapidpro/
+chgrp www-data /var/log/rapidpro/
+chmod 775 /var/log/rapidpro/
 ```
 * copy `/etc/systemd/system/celerybeat.service`
 * `systemctl status celerybeat`
+* `systemctl daemon-reload`
 * `systemctl enable celerybeat`
 * `systemctl start celerybeat`
 * copy `/etc/systemd/system/celery.service`
@@ -385,30 +386,114 @@ chmod 775 /var/log/celery/
 * `systemctl enable celery`
 * `systemctl start celery`
 
-## mage
+## Twitter & mage
+
+### Create Twitter App
+
+* Create Twitter account
+* Go to https://dev.twitter.com/apps/
+* Create new app
+* *Permission*: Read, Write and Access direct messages
+* *Settings*: set callback_url `http://rapidpro/channels/channel/claim_twitter/`
+* *Keys and Access Tokens*: copy `API Key` and `API Secret`.
+
+**Attention**: if Access Level is not `Read, write, and direct messages`, then regenerate.
+
+### Configure temba
+* `vim temba/settings.py`
+* Configure `TESTING = False`, `TWITTER_API_KEY` et `TWITTER_API_SECRET`
+* `systemctl restart rapidpro`
+* `systemctl stop celery`
+* `systemctl stop celerybeat`
+* Create Twitter channel https://rapidpro/channels/channel/claim_twitter/
+
+### Install mage
 
 ```
 apt install software-properties-common
 add-apt-repository "deb http://ppa.launchpad.net/webupd8team/java/ubuntu xenial main"
-apt intall oracle-java8-installer
+apt update
+apt install oracle-java8-installer
 update-alternatives --config java
 ```
-* get token from webUI (https://rapidpro/org/home/)
-* copy `src/mage-0.1.82.jar`
-* `mkdir -p ~/mage`
-* `ln -s ~/src/mage-*.jar mage.jar`
-* copy `config.yml` et `env.sh`
-* `./env.sh java -jar mage.jar server config.yml`
-* copy `/etc/systemd/system/mage.service`
+
+```
+wget -O ~/src/mage-0.1.82.jar "http://s000.tinyupload.com/download.php?file_id=57690352709769539444&t=5769035270976953944441119"`
+mkdir -p ~/mage`
+ln -s ~/src/mage-*.jar ~/mage/mage.jar
+```
+* Récupérer Token depuis https://192.168.60.2/api/v2
+* `vim ~/mage/config.yml`
+* Editer `~/mage/environ.sh` (`TEMBA_HOST`, `TEMBA_AUTH_TOKEN`, `TWITTER_API_KEY`, `TWITTER_API_SECRET`)
+* `set -a && source ~/mage/environ.sh && set +a && java -jar ~/mage/mage.jar server ~/mage/config.yml`
+* Verifier "*Found 1 active Twitter channel(s)*" et "*Added Twitter stream for handle*"
+* `vim /etc/systemd/system/mage.service`
 * `systemctl status mage`
 * `systemctl daemon-reload`
 * `systemctl enable mage`
 * `systemctl start mage`
+* `systemctl start celery`
+* `systemctl start celerybeat`
+
+## Facebook Channel
+
+### https valide
+* Créer tunnel ssh aigri.ml:800X -> 192.168.60.2:443
+* Configurer aigri.ml + certificat dans nginx
+* Tester https://aigril.ml:800X/
+
+### Facebook
+* Créer une application depuis https://developer.facebook.com/
+* Section *Messenger*
+* Cocher `pages_messaging`, `pages_messaging_subscriptions`
+* Sélectionner une page
+* `Generate Token`
+
+### RapidPro
+* Créer Channel depuis http://192.168.60.2/channels/channel/claim_facebook/
+* Copier le token et authoriser
+* `Add Webhook`, indiquer le callback (https) et tout cocher
+* Modifier les paramètres de la page: activer messenger et instant-answer
 
 ## Update RapidPro
 
-* git
-* pip install
-* migrate
-* collectstatic
-* restart
+### Backup DB
+```
+su - postgres -c "pg_dump -C > /home/rapidpro/rapidpro-dump.sql"
+```
+### Update temba code
+```
+git clone https://github.com/rapidpro/rapidpro.git ~/src/temba-`date +"%s"` --depth 1
+ln -sf src/temba* ~/temba
+cd ~/temba
+pip install -r pip-freeze.txt --allow-all-external
+./manage.py migrate --noinput
+./manage.py collectstatic --noinput
+```
+
+`systemctl restart rapidpro`
+
+### Rollback (if issues)
+
+#### Restore previous Code
+```
+ls -lt ~/src/
+ln -sf src/temba-xxxx ~/temba
+pip install -r pip-freeze.txt --allow-all-external
+./manage.py collectstatic --noinput
+```
+
+#### Restore DB
+```
+systemctl stop mage
+systemctl stop celery
+systemctl stop celerybeat
+systemctl stop rapidpro
+su - postgres -c "psql -c \"DROP DATABASE rapidpro;\""
+su - postgres -c "psql --set ON_ERROR_STOP=on < /home/rapidpro/rapidpro-dump.sql"
+systemctl start mage
+systemctl start celery
+systemctl start celerybeat
+systemctl start rapidpro
+```
+

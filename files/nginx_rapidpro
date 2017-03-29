@@ -2,7 +2,7 @@ server {
     listen 80;
     listen [::]:80;
 
-    server_name 192.168.60.2 localhost rapidpro aigri.ml www.agri.ml;
+    server_name 192.168.60.2 localhost rapidpro;
 
     access_log    /var/log/rapidpro/rapidpro-access.log combined;
     error_log     /var/log/rapidpro/rapidpro-error.log;
@@ -12,16 +12,14 @@ server {
 
     # static files
     location /sitestatic  {
-        alias /home/rapidpro/temba/sitestatic;
+        alias /home/rapidpro/sitestatic;
     }
 
     location /media  {
-        alias /home/rapidpro/temba/media;
+        alias /home/rapidpro/media;
     }
 
     location / {
-    	# root /tmp;
-    	# autoindex on;
         proxy_pass        http://localhost:3030;
         proxy_read_timeout 300s;
         proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
@@ -32,7 +30,7 @@ server {
     listen 443;
     listen [::]:443;
 
-    server_name 192.168.60.2 localhost rapidpro aigri.ml www.agri.ml;
+    server_name 192.168.60.2 localhost rapidpro;
 
     access_log    /var/log/rapidpro/rapidpro-ssl-access.log combined;
     error_log     /var/log/rapidpro/rapidpro-ssl-error.log;
@@ -58,16 +56,14 @@ server {
 
     # static files
     location /sitestatic  {
-        alias /home/rapidpro/temba/sitestatic;
+        alias /home/rapidpro/sitestatic;
     }
 
     location /media  {
-        alias /home/rapidpro/temba/media;
+        alias /home/rapidpro/media;
     }
 
     location / {
-    	# root /tmp;
-    	# autoindex on;
         proxy_pass        http://localhost:3030;
         proxy_read_timeout 300s;
 

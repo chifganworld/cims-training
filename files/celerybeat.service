@@ -6,7 +6,13 @@ After=network.target
 User=rapidpro
 Group=www-data
 WorkingDirectory=/home/rapidpro/temba
-ExecStart=/home/rapidpro/.virtualenvs/rapidpro/bin/celery beat -A temba --logfile=/var/log/celery/beat-rapidpro.log --pidfile=/var/run/celery-beat-rapidpro.pid
+
+PermissionsStartOnly=true
+ExecStartPre=/bin/mkdir -p /var/run/rapidpro/
+ExecStartPre=/bin/chown -R rapidpro:www-data /var/run/rapidpro/
+
+ExecStart=/home/rapidpro/.virtualenvs/rapidpro/bin/celery beat -A temba --logfile=/var/log/rapidpro/celery-beat.log --pidfile=/var/run/rapidpro/celerybeat.pid
+
 Restart=always
 
 [Install]

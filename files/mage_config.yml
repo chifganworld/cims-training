@@ -17,7 +17,7 @@
 #
 
 general:
-    production: 1
+    production: ${PRODUCTION}
 
 server:
     type: default
@@ -38,7 +38,7 @@ database:
     driverClass: org.postgresql.Driver
 
     # the URL (same format as Django)
-    fullUrl: postgresql://rapidpro:rapidpro@localhost/rapidpro
+    fullUrl: ${DATABASE_URL}
 
     # any properties specific to your JDBC driver:
     properties:
@@ -68,19 +68,19 @@ logging:
         "com.sun.jersey.api.container.filter.LoggingFilter": DEBUG
 
 redis:
-    host: localhost
-    database: 8
+    host: ${REDIS_HOST}
+    database: ${REDIS_DATABASE}
 
 temba:
-    apiUrl: http://192.168.60.2/api/v1
-    authToken: XXXX
+    apiUrl: https://${TEMBA_HOST}/api/v1
+    authToken: ${TEMBA_AUTH_TOKEN}
 
 twitter:
-    apiKey: -
-    apiSecret: -
+    apiKey: ${TWITTER_API_KEY}
+    apiSecret: ${TWITTER_API_SECRET}
 
 monitoring:
-    segmentioWriteKey: false
-    sentryDsn: false
-    libratoEmail: false
-    libratoApiToken: false
+    segmentioWriteKey: ${SEGMENTIO_WRITE_KEY}
+    sentryDsn: ${SENTRY_DSN}
+    libratoEmail: ${LIBRATO_EMAIL}
+    libratoApiToken: ${LIBRATO_API_TOKEN}

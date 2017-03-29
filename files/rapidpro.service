@@ -2,12 +2,17 @@
 Description=uWSGI instance to serve rapidpro
 
 [Service]
-ExecStart=/home/rapidpro/.virtualenvs/rapidpro/bin/uwsgi --ini /home/rapidpro/temba/uwsgi.ini --env DJANGO_SETTINGS_MODULE=temba.settings
-Restart=always
-KillSignal=SIGQUIT
 Type=notify
 StandardError=syslog
 NotifyAccess=all
+
+PermissionsStartOnly=true
+ExecStartPre=/bin/mkdir -p /var/run/rapidpro/
+ExecStartPre=/bin/chown -R rapidpro:www-data /var/run/rapidpro/
+
+ExecStart=/home/rapidpro/.virtualenvs/rapidpro/bin/uwsgi --ini /home/rapidpro/temba/uwsgi.ini --env DJANGO_SETTINGS_MODULE=temba.settings
+Restart=always
+KillSignal=SIGQUIT
 
 [Install]
 WantedBy=multi-user.target
