@@ -1,256 +1,88 @@
+# Manual RapidPro Installation (debian 8.7)
 
-# Composants RapidPro
+This document describes a step-by-step manual installation of RapidPro on a debian 8.7 system. Written on March 2017.
 
-## PostgreSQL
+Assumptions:
 
-* Base de données
- * Orgs, Flows, Runs, Msgs, Users, etc.
-* BDD géographique
+* IP is `192.168.60.2`. Change to your hostname.
+* All services on the same host (PostgreSQL, redis, mage, nginx, uwsgi, celery)
+* PIDs created on `/var/run/rapidpro`
+* Logs stored on `/var/log/rapidpro/`
+* All services are started by systemd.
+* RapidPro is installed under unprivileged user `rapidpro`
 
-## redis
+## PostgreSQL (as `root`)
 
-* BDD clé-valeur
-* Stockage temporaire
-* Données mises en cache (temba)
-* Données des queues redis
-* Données des queues mage
-
-## temba
-
-* Application Web de RapidPro
-* Python+Django et 60 autres bibliothèques
-* uWSGI: interface WSGI/python pour nginx
-
-## Web Stack
-* LESS (compilateur CSS)
-* Coffeescript (compilateur JavaScript)
-* NodeJS + bower (gestion de paquets JavaScript: 40 dépendances)
-
-## Celery
-
-* Gère toutes les tâches asynchrones
-* broker (default, handler, msgs, flows)
-* taches périodiques et planifiées
-
-## mage
-
-* Serveur Web
-* Java
-* Gère le callback de Twitter (lecture-seule)
-
-## nginx
-
-* Serveur Web (server_name)
-* Sert les fichiers *statiques*:
- * CSS, JS (rapidpro et dépendances)
- * dossier `/media` (imports, exports, logos)
-* Certificat SSL et redirection 
-
-
-# Environment de test
-
-Réplique réaliste d'un serveur existant. Basé sur un Debian récent:
-
-* Version des paquets (postgres, nginx, redis, java)
-* systemd (upstart, sysvinit)
-
-## Preparation
-
-* VirtualBox
-	Preferences > Network > Host-only networks
-		Add vboxnetX 
-			DHCP
-			192.168.60.1 255.255.255.0
-			192.168.60.2 192.168.60.50
-
-* debian64 VM
-	* 2GB RAM
-	* 20GB dynamic HDD
-	* Network
-		1. NAT
-		2. host-only @ vboxnetX
-	* Optical drive: debian-8.7.1-amd64-netinst.iso
-	* Install
-		* English > Africa > Tunisia > en_US.UTF-8 > American English (keymap)
-	   * hostname: rapidpro
-	   * domain: cims
-	   * root password: tunis
-	   * Superman / super / super
-	   * Guided, entire disk, single partition
-	   * Mirror: Tunisia (debian.mirror.tn)
-	   * Packages: ssh, std system utilities
-	   * Install grub (/dev/sda)
-	* Initial config (root)
-	   * `/etc/network/interfaces`
-```
-allow-hotplug eth1
-iface eth1 inet dhcp
-```
-      * `reboot -h now`
-      * Install ssh-keys (super and root)
-      * Install sudo: `apt install sudo && usermod -a -G sudo super`
-      * Install Vim `apt install ntp screen vim && wget -O ~/.vimrc https://raw.githubusercontent.com/rgaudin/MiniVim/master/vimrc && cp ~/.vimrc /home/super/.vimrc && chown super:super /home/super/.vimrc`
-
-## Utilisation
-
-### Installation
-
-* Install VirtualBox
-* Install Putty (Windows)
-* Add key to putty
-* Import VM
-
-### Première connexion
-
-* Reconfigurer clavier
-
-```
-sudo dpkg-reconfigure keyboard-configuration
-sudo service keyboard-setup restart
+``` sh
+apt install postgresql-9.4 postgresql-9.4-postgis-2.1
 ```
 
-```
-/etc/profile.d/proxy.sh
-
-export http_proxy="formation18:form15*+@172.20.0.2:3113"
-```
-
-# Installation
-
-Concepts: URL, socket, ports, daemon
-
-## PostgreSQL
-
-* https://www.postgresql.org/docs/9.4/static
-* `apt install postgresql-9.4 postgresql-9.4-postgis-2.1`
-
-* `vim /etc/postgresql/9.4/main/postgresql.conf`: configuration générale
- * paramètrages (chemins, options)
- * optimisations (algorithmes, tailles des buffers)
- * **listen_addresses = 'localhost'**
- * **port = 5432**
-* `pg_hba.conf`: configuration des accès à postgres.
-
-* Création compte et base dédiés à RapidPro
-
-```
+``` sh
 sudo su - postgres
-psql -c "CREATE USER rapidpro WITH PASSWORD 'rapidpro';"
-psql -c "CREATE DATABASE rapidpro;"
-psql -c "GRANT CREATE,CONNECT,TEMP ON DATABASE rapidpro to rapidpro;"
+psql -c "CREATE USER rapidpro_user WITH PASSWORD 'rapidpro_pass';"
+psql -c "CREATE DATABASE rapidpro_db;"
+psql -c "GRANT CREATE,CONNECT,TEMP ON DATABASE rapidpro_db to rapidpro_user;"
+psql -d rapidpro_db -c "CREATE EXTENSION postgis; CREATE EXTENSION postgis_topology; CREATE EXTENSION hstore;"
 ```
 
-* create extension pour postgis
+## redis (as `root`)
 
-```
-psql -d rapidpro -c "CREATE EXTENSION postgis; CREATE EXTENSION postgis_topology; CREATE EXTENSION hstore;"
-```
-
-* DSN: `postgresql://rapidpro:rapidpro@localhost/rapidpro`
-* Tests 
-
-`psql postgresql://rapidpro:rapidpro@localhost/rapidpro`
-
-```
-\d
-\dt
-CREATE TABLE test();
-\dt
-DROP TABLE test;
-\dt
+``` sh
+apt install redis-server redis-tools
 ```
 
-* Backup
+## SSL Certificate (as `root`)
 
-```
-sudo su - postgres -c "pg_dump rapidpro > /tmp/postgres-rapidpro.sql"
-sudo su - postgres -c "pg_dumpall > /tmp/postgress-all.sql"
-```
+* Generation of a self-signed SSL certificate for testing. Not suitable for production. Use certbot instead.
 
-* Restore
-
-```
-sudo su - postgres -c "psql --set ON_ERROR_STOP=on rapidpro < /tmp/postgres-rapidpro.sql"
-sudo su - postgres -c "psql --set ON_ERROR_STOP=on -f /tmp/postgres-rapidpro.sql postgres"
-```
-
-* Vérifier démarrage: `systemctl status postgresql`
-* [psql cheatsheet](https://gist.github.com/Kartones/dd3ff5ec5ea238d4c546)
-
-## redis
-
-`apt install redis-server redis-tools`
-
-* `/etc/redis/redis.conf`
- * **port 6379**
- * **bind 127.0.0.1**
- * **databases 16**
-
-* test `redis-cli`
-
-```
-SET "name" "Tunis"
-GET "name"
-DEL "name"
-GET "name"
-LPUSH "names" "Tunis"
-LPUSH "names" "Carthage"
-LLEN "names"
-LPOP "names"
-LLEN "names"
-```
-* Vérifier démarrage: `systemctl status redis-server`
-
-
-## update
-* Changer `mirror.debian.tn` par `ftp.fr.debian.org` dans /etc/apt/sources.list`
-* `apt update && apt upgrade`
-
-
-## SSL certificate
-
-```
-openssl dhparam -dsaparam -out /etc/ssl/certs/dhparam.pem 4096
+``` sh
 openssl req -x509 -nodes -days 1095 -newkey rsa:2048 -keyout /etc/ssl/private/rapidpro-self.key -out /etc/ssl/certs/rapidpro-self.crt
 ```
+* Answer as wanted. Indicate `192.168.60.2` as Common Name (FQDN)
 
-* Verify informations
+## nginx (part 1 – as `root`)
 
+``` sh
+apt install nginx
+mkdir -p /var/log/rapidpro/
 ```
-openssl x509 -in /etc/ssl/certs/rapidpro-self.crt -text -noout
 
-openssl x509 -noout -modulus -in /etc/ssl/certs/rapidpro-self.crt| openssl md5
-openssl rsa -noout -modulus -in /etc/ssl/private/rapidpro-self.key| openssl md5
-```
+Edit `/etc/nginx/sites-available/rapidpro`
 
-## nginx (part1)
-
-* `apt install nginx`
-* `mkdir -p /var/log/rapidpro/`
-* Copier `/etc/nginx/sites-available/rapidpro`
-* `ln -s /etc/nginx/sites-available/rapidpro /etc/nginx/sites-enabled/rapidpro`
-
-```
+``` nginx
 server {
     listen 80;
     listen [::]:80;
 
-    server_name 192.168.60.2 localhost rapidpro aigri.ml www.agri.ml;
+    server_name 192.168.60.2 localhost;
 
-    access_log    /var/log/rapidpro/rapidpro-access.log combined;
-    error_log     /var/log/rapidpro/rapidpro-error.log;
+    access_log    /var/log/rapidpro/nginx-access.log combined;
+    error_log     /var/log/rapidpro/nginx-error.log;
 
     # entity size
     client_max_body_size 50m;
 
     # static files
     location /sitestatic  {
-        alias /home/rapidpro/temba/sitestatic;
+        # alias /home/rapidpro/sitestatic;
+    }
+
+    location /media  {
+        # alias /home/rapidpro/media;
     }
 
     location / {
-        proxy_pass        http://localhost:3030;
+        root /tmp;
+        autoindex on;
+        # proxy_pass        http://localhost:3030;
         proxy_read_timeout 300s;
+
+        proxy_redirect     off;
+        proxy_set_header   Host $host;
+        proxy_set_header   X-Real-IP $remote_addr;
+        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Host $server_name;
+
         proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
     }
 }
@@ -259,14 +91,43 @@ server {
     listen 443;
     listen [::]:443;
 
+    server_name 192.168.60.2 localhost;
+
+    access_log    /var/log/rapidpro/nginx-ssl-access.log combined;
+    error_log     /var/log/rapidpro/nginx-ssl-error.log;
+
+    # certs
     ssl_certificate      /etc/ssl/certs/rapidpro-self.crt;
     ssl_certificate_key  /etc/ssl/private/rapidpro-self.key;
 
+    # ssl opts
+    ssl on;
+    ssl_protocols        TLSv1 TLSv1.1 TLSv1.2;
+    ssl_ciphers          RC4:HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+    keepalive_timeout    70;
+    ssl_session_cache    shared:SSL:10m;
+    ssl_session_timeout  10m;
+    
     # tell client/browser to always use https
     add_header Strict-Transport-Security max-age=31536000;
 
+    # entity size
+    client_max_body_size 50m;
+
+    # static files
+    location /sitestatic  {
+        # alias /home/rapidpro/sitestatic;
+    }
+
+    location /media  {
+        # alias /home/rapidpro/media;
+    }
+
     location / {
-        proxy_pass        http://localhost:3030;
+        root /tmp;
+        autoindex on;
+        # proxy_pass        http://localhost:3030;
         proxy_read_timeout 300s;
 
         proxy_redirect     off;
@@ -274,119 +135,384 @@ server {
         proxy_set_header   X-Real-IP $remote_addr;
         proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header   X-Forwarded-Host $server_name;
+
+        # timeouts on unavailable backend(s)
+        proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
     }
 }
 ```
-* Vérifier démarrage: `systemctl status nginx`
-* redémarrage: `nginx -s reload`
-* Tester `http://192.168.60.2` et `https://192.168.60.2`
 
-## temba
-
-* Dependencies
-* `apt install git zlib1g liblzma-dev`
-* `apt install libncurses5 libncurses-dev libreadline-dev libreadline5`
-* `apt install libxslt1.1 xsltproc libxml2-dev libxslt1-dev`
-* `apt install libgpg-error-dev libffi6 libffi-dev`
-* `apt install perl libpcre3 tcl shadowsocks`
-* `apt install libgd3 libjpeg62 libjpeg-dev libpng12-0 libpng-dev`
-* `apt install python2.7-dev python-virtualenv python-pip python-lxml libpq-dev python-psycopg2 python-celery`
-* `apt install npm nodejs`
-* `npm install -g less coffee-script bower`
-* `ln -s /usr/bin/nodejs /usr/bin/node`
-* create user `useradd -g www-data -m -N -s /bin/bash rapidpro`
-* `cp -r /home/super/.ssh /home/rapidpro/`
-* `chown -R rapidpro:www-data /home/rapidpro/.ssh/`
-
-**En tant que `rapidpro`** (`su - rapidpro`)
-
-* `mkdir .virtualenvs && virtualenv .virtualenvs/rapidpro`
-* `mkdir -p src`
-
-```
-git clone https://github.com/rapidpro/rapidpro.git src/temba-`date +"%s"` --depth 1
-```
-* `ln -s src/temba* temba`
-* `vim ~/.bashrc`:
-
-```
-source ~/.virtualenvs/rapidpro/bin/activate
-cd ~/temba"
-```
-* exit
-
-## Fichiers de configuration
-
-`git clone https://github.com/rgaudin/cims-training.git ~/src/training`
-
-## temba (en tant que `rapidpro`)
-
-* `pip install -r pip-freeze.txt --allow-all-external`
-* `pip install -U pip`
-* `pip install -U setuptools`
-* `pip install uwsgi`
-* copy `temba/settings.py`
-* `./manage.py migrate --noinput`
-* `./manage.py collectstatic --noinput`
-* `mkdir -p ~/{sitestatic,media}`
-* `chmod 755 ~/{sitestatic,media}`
-* `./manage.py createsuperuser --username root` (admin)
-* copy `uwsgi.ini`
-* test `./manage.py runserver 0.0.0.0:8000` via `http://192.168.60.2:8000`
-* copy `/etc/systemd/system/rapidpro.service`
-* `systemctl status rapidpro`
-* `systemctl daemon-reload`
-* `systemctl enable rapidpro`
-* `systemctl start rapidpro`
-
-## nginx (part2)
-
-```
-#root /home/super;
-#autoindex on;
-proxy_pass        http://localhost:3030;
+``` sh
+ln -s /etc/nginx/sites-available/rapidpro /etc/nginx/sites-enabled/rapidpro
+nginx -s reload
 ```
 
-## GIS data
+* Test http://192.168.60.2 and https://192.168.60.2. You should see content of `/tmp`.
 
-**Tunisia OSM relation ID**: R192757
-
+## temba (as `root`)
+``` sh
+apt install git zlib1g liblzma-dev
+apt install libncurses5 libncurses-dev libreadline-dev libreadline5
+apt install libxslt1.1 xsltproc libxml2-dev libxslt1-dev
+apt install libgpg-error-dev libffi6 libffi-dev
+apt install perl libpcre3 tcl shadowsocks
+apt install libgd3 libjpeg62 libjpeg-dev libpng12-0 libpng-dev
+apt install python2.7-dev python-virtualenv python-pip python-lxml libpq-dev python-psycopg2 python-celery
+apt install npm nodejs
+npm install -g less coffee-script bower
+ln -s /usr/bin/nodejs /usr/bin/node
+create user useradd -g www-data -m -N -s /bin/bash rapidpro
 ```
-mkdir -p ~/posm-extracts
-cd ~/posm-extracts
-wget https://github.com/nyaruka/posm-extracts/raw/master/geojson/R192757admin0_simplified.json
-wget https://github.com/nyaruka/posm-extracts/raw/master/geojson/R192757admin1_simplified.json
-wget https://github.com/nyaruka/posm-extracts/raw/master/geojson/R192757admin2_simplified.json
-cd ~/temba
-./manage.py import_geojson ~/posm-extracts/*_simplified.json
+
+## temba as `rapidpro` user
+
+`su - rapidpro`
+
+``` sh
+mkdir ~/venvs && virtualenv ~/venvs/rapidpro
+mkdir -p ~/src
+git clone https://github.com/rapidpro/rapidpro.git ~/src/rapidpro-`date +"%s"` --depth 1
+ln -s ~/src/rapidpro-* ~/app
+```
+* Add virtualenv activation and jump to temba folder on `~/.bashrc`
+
+``` sh
+source ~/venvs/rapidpro/bin/activate
+cd ~/app
 ```
 
-## WebUI Configuration
-
-* Log into `https://192.168.60.2/org/grant/` with `root`/`admin` credentials
-* Create Organization Owner account
-* Go to `https://192.168.60.2/org/home/` and change Location to **Tunisie**.
-* Log out and login with newly created account.
-
-## Celery
-
+``` sh
+pip install -r pip-freeze.txt --allow-all-external
+pip install -U pip
+pip install -U setuptools
+pip install -U uwsgi
 ```
+
+* Create file `~/settings.py`
+**Note**: It's a python file, not a text configuration one. Use `True` and `False` capitalized.
+
+``` python
+from __future__ import absolute_import, unicode_literals
+
+from .settings_common import *  # noqa
+
+DEBUG = False
+IS_PROD = True
+HOSTNAME = '192.168.60.2'
+ALLOWED_HOSTS = [HOSTNAME, 'localhost', '127.0.0.1', 'rapidpro']
+
+STATIC_ROOT = "/home/rapidpro/sitestatic"
+COMPRESS_ROOT = STATIC_ROOT
+MEDIA_ROOT = "/home/rapidpro/media"
+
+USER_TIME_ZONE = 'Africa/Tunis'
+LANGUAGE_CODE = 'fr-fr'
+DEFAULT_LANGUAGE = "fr-fr"
+DEFAULT_SMS_LANGUAGE = "fr-fr"
+
+SECRET_KEY = 'abcddaslkldk;lsakdl;akdl;'
+
+POSTGRES_HOST = "localhost"
+POSTGRES_USERNAME = "rapidpro"
+POSTGRES_PASSWORD = "rapidpro"
+POSTGRES_NAME = "rapidpro"
+
+REDIS_HOST = 'localhost'
+REDIS_PORT = 6379
+REDIS_DB = 10 if TESTING else 15
+
+IP_ADDRESSES = ('192.168.60.2')  # public IP addresses
+ADMINS = (('RapidPro', 'dwambua@ona.io'), )
+EMAIL_HOST_USER = None
+DEFAULT_FROM_EMAIL = None
+EMAIL_HOST_PASSWORD = None
+EMAIL_USE_TLS = True
+EMAIL_HOST = None
+
+TWITTER_API_KEY = '-'
+TWITTER_API_SECRET = '-'
+MAGE_HOST = "localhost"
+MAGE_PORT = 8026
+MAGE_AUTH_TOKEN = '123456789abcdef'
+
+# INTERNAL_IPS = INTERNAL_IPS + ('xxx.xx.xx.xx')
+
+# Attention: triggers actual messages and such
+SEND_MESSAGES = True
+SEND_WEBHOOKS = True
+SEND_EMAILS = True
+
+# end of main configuration
+TESTING = False
+TEMBA_HOST = HOSTNAME
+COMPRESS_ROOT = STATIC_ROOT
+TEMPLATE_DEBUG = DEBUG
+MANAGERS = ADMINS
+MAGE_API_URL = "http://{host}:{port}/api/v1".format(host=MAGE_HOST,
+                                                    port=MAGE_PORT)
+
+
+BROKER_URL = 'redis://%s:%d/%d' % (REDIS_HOST, REDIS_PORT, REDIS_DB)
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": "redis://%s:%s/%s" % (REDIS_HOST, REDIS_PORT, REDIS_DB),
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        }
+    }
+}
+
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.contrib.gis.db.backends.postgis',
+        'NAME': POSTGRES_NAME,
+        'USER': POSTGRES_USERNAME,
+        'PASSWORD': POSTGRES_PASSWORD,
+        'HOST': POSTGRES_HOST,
+        'PORT': '',
+        'ATOMIC_REQUESTS': True,
+        'CONN_MAX_AGE': 60,
+        'OPTIONS': {
+        }
+    }
+}
+DATABASES['default']['CONN_MAX_AGE'] = 60
+DATABASES['default']['ATOMIC_REQUESTS'] = True
+DATABASES['default']['ENGINE'] = 'django.contrib.gis.db.backends.postgis'
+
+if TESTING:
+    INSTALLED_APPS = INSTALLED_APPS + ('storages')
+    MIDDLEWARE_CLASSES = ('temba.middleware.ExceptionMiddleware',) \
+        + MIDDLEWARE_CLASSES
+    CELERY_ALWAYS_EAGER = True
+    CELERY_EAGER_PROPAGATES_EXCEPTIONS = True
+    BROKER_BACKEND = 'memory'
+else:
+    CELERY_ALWAYS_EAGER = False
+    CELERY_EAGER_PROPAGATES_EXCEPTIONS = True
+    BROKER_BACKEND = 'redis'
+
+DEFAULT_DOMAIN = ALLOWED_HOSTS[-1]
+BRANDING_URL = "https://{}".format(DEFAULT_DOMAIN)
+BRANDING = {
+    'default': {
+        'slug': 'rapidpro',
+        'name': 'RapidPro',
+        'org': 'UNICEF',
+        'styles': ['brands/rapidpro/font/style.css',
+                   'brands/rapidpro/less/style.less'],
+        'welcome_topup': 1000,
+        'email': 'join@193.95.84.200',
+        'support_email': 'support@rapidpro.ona.io',
+        'link': BRANDING_URL,
+        'api_link': BRANDING_URL,
+        'docs_link': BRANDING_URL,
+        'domain': DEFAULT_DOMAIN,
+        'favico': 'brands/rapidpro/rapidpro.ico',
+        'splash': '/brands/rapidpro/splash.jpg',
+        'logo': '/brands/rapidpro/logo.png',
+        'allow_signups': True,
+        'tiers': dict(multi_user=0, multi_org=0),
+        'bundles': [],
+        'welcome_packs': [dict(size=5000, name="Demo Account"),
+                          dict(size=100000, name="UNICEF Account")],
+        'description': "CIMS RapidPro",
+        'credits': "Copyright &copy; 2012-2015 UNICEF, Nyaruka. "
+                   "All Rights Reserved.",
+    }
+}
+DEFAULT_BRAND = 'default'
+```
+
+``` sh
+ln -sf ~/settings.py ~/app/temba/settings.py
+mkdir -p ~/{sitestatic,media}
+chmod 755 ~/{sitestatic,media}
+cd ~/app
+./manage.py migrate --noinput
+./manage.py collectstatic --noinput
+./manage.py createsuperuser --username root
+```
+Remember the password you set for root (ex: admin)
+
+* Create file `~/app/uwsgi.ini`
+
+``` ini
+[uwsgi]
+http=:3030
+# socket=/var/run/rapidpro/rapidpro.sock
+# chmod-socket=777
+
+uid=rapidpro
+gid=www-data
+chdir=/home/rapidpro/app
+pidfile=/var/run/rapidpro/uwsgi.pid
+logto=/var/log/rapidpro/uwsgi_rapidpro.log
+
+virtualenv=/home/rapidpro/venvs/rapidpro
+module=temba.wsgi:application
+env=HTTPS=on
+
+master=True
+
+# static-map=/sitestatic=/home/rapidpro/sitestatic # if no frontend httpd
+
+# stats=/var/run/rapidpro/uwsgi_stats.sock
+
+# tweak for perf
+processes = 4
+threads = 2  # nb cpu
+enable-threads = True
+disable-logging = True
+
+buffer-size=8192
+harakiri=240                # respawn processes taking more than 240 seconds
+max-requests=5000           # respawn processes after serving 5000 requests
+vacuum=True                 # clear environment on exit
+```
+
+``` sh
+./manage.py runserver 0.0.0.0:8000
+```
+* Test setup on http://192.168.60.2:8000
+
+## temba (as `root`)
+
+* Create file `/etc/systemd/system/rapidpro.service`
+
+``` ini
+[Unit]
+Description=uWSGI instance to serve rapidpro
+
+[Service]
+Type=notify
+StandardError=syslog
+NotifyAccess=all
+
+PermissionsStartOnly=true
+ExecStartPre=/bin/mkdir -p /var/run/rapidpro/
+ExecStartPre=/bin/chown -R rapidpro:www-data /var/run/rapidpro/
+
+ExecStart=/home/rapidpro/venvs/rapidpro/bin/uwsgi --ini /home/rapidpro/app/uwsgi.ini --env DJANGO_SETTINGS_MODULE=temba.settings
+Restart=always
+KillSignal=SIGQUIT
+
+[Install]
+WantedBy=multi-user.target
+```
+
+``` sh
 mkdir -p /var/log/rapidpro/
 chgrp www-data /var/log/rapidpro/
 chmod 775 /var/log/rapidpro/
-```
-* copy `/etc/systemd/system/celerybeat.service`
-* `systemctl status celerybeat`
-* `systemctl daemon-reload`
-* `systemctl enable celerybeat`
-* `systemctl start celerybeat`
-* copy `/etc/systemd/system/celery.service`
-* `systemctl status celery`
-* `systemctl daemon-reload`
-* `systemctl enable celery`
-* `systemctl start celery`
 
-## Twitter & mage
+systemctl status rapidpro
+systemctl daemon-reload
+systemctl enable rapidpro
+systemctl start rapidpro
+```
+
+## nginx (part 2)
+
+* Edit `/etc/nginx/sites-available/rapidpro`:
+ * remove comments on `alias` commands.
+ * remove comments on `proxy_pass` commands.
+ * remove lines starting with `root` and `autoindex`
+
+``` sh
+nginx -s reload
+```
+
+* Test http://192.168.60.2 and https://192.168.60.2
+
+## GIS data (as `rapidpro` user)
+
+`su - rapidpro`
+
+**Note**: Following example is for Tunisia aka `R192757`. Replace with your country's ID from [nominatim](https://nominatim.openstreetmap.org/). More details on [RapidPro Hosting](https://rapidpro.github.io/rapidpro/docs/hosting/).
+
+``` sh
+mkdir -p ~/src/posm
+wget https://github.com/nyaruka/posm-extracts/raw/master/geojson/R192757admin0_simplified.json -O ~/src/posm/R192757admin0_simplified.json
+wget https://github.com/nyaruka/posm-extracts/raw/master/geojson/R192757admin1_simplified.json -O ~/src/posm/R192757admin1_simplified.json
+wget https://github.com/nyaruka/posm-extracts/raw/master/geojson/R192757admin2_simplified.json -O ~/src/posm/R192757admin2_simplified.json
+cd ~/app
+./manage.py import_geojson ~/src/posm/*_simplified.json
+```
+
+## Web UI Configuration
+
+* Log into https://192.168.60.2/org/grant/ with root credentials
+* Create Organization Owner account
+* Go to https://192.168.60.2/org/home/ and change Location appropriately.
+* Log out and login with newly created account.
+
+## Celery (as `root`)
+
+* Create file `/etc/systemd/system/celerybeat.service`
+
+``` ini
+[Unit]
+Description=Celery beat for rapidpro
+After=network.target
+
+[Service]
+User=rapidpro
+Group=www-data
+WorkingDirectory=/home/rapidpro/app
+
+PermissionsStartOnly=true
+ExecStartPre=/bin/mkdir -p /var/run/rapidpro/
+ExecStartPre=/bin/chown -R rapidpro:www-data /var/run/rapidpro/
+
+ExecStart=/home/rapidpro/venvs/rapidpro/bin/celery beat -A temba --logfile=/var/log/rapidpro/celerybeat.log --pidfile=/var/run/rapidpro/celerybeat.pid
+
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+``` sh
+systemctl status celerybeat
+systemctl daemon-reload
+systemctl enable celerybeat
+systemctl start celerybeat
+systemctl status celerybeat
+```
+* Create file `/etc/systemd/system/celery.service`
+
+``` ini
+[Unit]
+Description=Celery Service
+After=network.target
+
+[Service]
+Type=forking
+User=rapidpro
+Group=www-data
+WorkingDirectory=/home/rapidpro/app
+
+PermissionsStartOnly=true
+ExecStartPre=/bin/mkdir -p /var/run/rapidpro/
+ExecStartPre=/bin/chown -R rapidpro:www-data /var/run/rapidpro/
+
+ExecStart=/home/rapidpro/venvs/rapidpro/bin/celery multi start default-node handler-node msg-node flow-node -A temba --logfile="/var/log/rapidpro/celery-%%n%%I.log" --pidfile="/var/run/rapidpro/celery-%%n.pid" --time-limit=300 --concurrency=1 -Q:default-node celery -Q:handler-node handler -Q:msg-node msgs -Q:flow-node flows
+ExecStop=/home/rapidpro/venvs/rapidpro/bin/celery multi stopwait default-node handler-node msg-node flow-node --pidfile="/var/run/rapidpro/celery-%%n.pid"
+ExecReload=/home/rapidpro/venvs/rapidpro/bin/celery multi restart default-node handler-node msg-node flow-node -A temba --pidfile="/var/run/rapidpro/celery-%%n.pid" --logfile="/var/log/rapidpro/celery-%%n%%I.log" --loglevel="INFO" --time-limit=300 --concurrency=1 -Q:default-node celery -Q:handler-node handler -Q:msg-node msgs -Q:flow-node flows
+
+[Install]
+WantedBy=multi-user.target
+```
+``` sh
+systemctl status celery
+systemctl daemon-reload
+systemctl enable celery
+systemctl start celery
+systemctl status celerybeat
+```
+
+## Twitter Channel
 
 ### Create Twitter App
 
@@ -394,22 +520,30 @@ chmod 775 /var/log/rapidpro/
 * Go to https://dev.twitter.com/apps/
 * Create new app
 * *Permission*: Read, Write and Access direct messages
-* *Settings*: set callback_url `http://rapidpro/channels/channel/claim_twitter/`
+* *Settings*: set callback_url `http://rapidpro/channels/channel/claim_twitter/`. *Note*: `callback_url` if not enforced by default but edit it to your public domain if you have one.
 * *Keys and Access Tokens*: copy `API Key` and `API Secret`.
 
-**Attention**: if Access Level is not `Read, write, and direct messages`, then regenerate.
+**Attention**: if Access Level is not `Read, write, and direct messages`, then regenerate token.
 
 ### Configure temba
-* `vim temba/settings.py`
-* Configure `TESTING = False`, `TWITTER_API_KEY` et `TWITTER_API_SECRET`
-* `systemctl restart rapidpro`
-* `systemctl stop celery`
-* `systemctl stop celerybeat`
-* Create Twitter channel https://rapidpro/channels/channel/claim_twitter/
+* Update `~/settings.py`:
 
-### Install mage
-
+```python
+TWITTER_API_KEY = 'XXX'
+TWITTER_API_SECRET = 'XXX'
 ```
+
+### Restart temba and stop celery (as `root`)
+``` sh
+systemctl restart rapidpro
+systemctl stop celery
+systemctl stop celerybeat
+```
+* Create Twitter channel at http://192.168.60.2/channels/channel/claim_twitter/
+
+### Install mage (as `root`)
+
+``` sh
 apt install software-properties-common
 add-apt-repository "deb http://ppa.launchpad.net/webupd8team/java/ubuntu xenial main"
 apt update
@@ -417,83 +551,290 @@ apt install oracle-java8-installer
 update-alternatives --config java
 ```
 
-```
+### Configure mage (as `rapidpro` user)
+
+`su - rapidpro`
+
+``` sh
 wget -O ~/src/mage-0.1.82.jar "http://s000.tinyupload.com/download.php?file_id=57690352709769539444&t=5769035270976953944441119"`
 mkdir -p ~/mage`
 ln -s ~/src/mage-*.jar ~/mage/mage.jar
 ```
-* Récupérer Token depuis https://192.168.60.2/api/v2
-* `vim ~/mage/config.yml`
-* Editer `~/mage/environ.sh` (`TEMBA_HOST`, `TEMBA_AUTH_TOKEN`, `TWITTER_API_KEY`, `TWITTER_API_SECRET`)
+
+* Get API Token from https://192.168.60.2/api/v2
+* Create file `~/mage/config.yml`
+
+``` yaml
+#
+# Configuration for Message Mage
+#
+# The following environment variables should be defined:
+#  * PRODUCTION - whether this is a production instance (1) or not (0)
+#  * DATABASE_URL - Django format database connection URL
+#  * REDIS_HOST - Redis cache host
+#  * REDIS_DATABASE - Redis database number
+#  * TEMBA_HOST - Temba host name
+#  * TEMBA_AUTH_TOKEN - authentication token for the Temba API
+#  * TWITTER_API_KEY - public key for Twitter API
+#  * TWITTER_API_SECRET - secret token for Twitter API
+#  * SEGMENTIO_WRITE_KEY - write key for segment.io
+#  * SENTRY_DSN - URL for Sentry error reporting
+#  * LIBRATO_EMAIL - Librato email/login
+#  * LIBRATO_API_TOKEN - Librato API token
+#
+
+general:
+    production: ${PRODUCTION}
+
+server:
+    type: default
+    minThreads: 8
+    maxThreads: 64
+    applicationContextPath: /
+    applicationConnectors:
+      - type: http
+        port: 8026
+    rootPath: '/api/v1/*'
+    adminContextPath: /
+    adminConnectors:
+      - type: http
+        port: 8028
+
+database:
+    # the name of your JDBC driver
+    driverClass: org.postgresql.Driver
+
+    # the URL (same format as Django)
+    fullUrl: ${DATABASE_URL}
+
+    # any properties specific to your JDBC driver:
+    properties:
+        charSet: UTF-8
+
+    # the maximum amount of time to wait on an empty pool before throwing an exception
+    maxWaitForConnection: 1s
+
+    # the SQL query to run when validating a connection's liveness
+    validationQuery: "/* MyService Health Check */ SELECT 1"
+
+    # the minimum number of connections to keep open
+    minSize: 8
+
+    # the maximum number of connections to keep open
+    maxSize: 32
+
+    # whether or not idle connections should be validated
+    checkConnectionWhileIdle: false
+
+logging:
+    appenders:
+      - type: console
+        threshold: INFO
+        target: stdout
+    loggers:
+        "com.sun.jersey.api.container.filter.LoggingFilter": DEBUG
+
+redis:
+    host: ${REDIS_HOST}
+    database: ${REDIS_DATABASE}
+
+temba:
+    apiUrl: https://${TEMBA_HOST}/api/v1
+    authToken: ${TEMBA_AUTH_TOKEN}
+
+twitter:
+    apiKey: ${TWITTER_API_KEY}
+    apiSecret: ${TWITTER_API_SECRET}
+
+monitoring:
+    segmentioWriteKey: ${SEGMENTIO_WRITE_KEY}
+    sentryDsn: ${SENTRY_DSN}
+    libratoEmail: ${LIBRATO_EMAIL}
+    libratoApiToken: ${LIBRATO_API_TOKEN}
+```
+* Create and **configure** file `~/mage/environ.sh`
+
+``` sh
+PRODUCTION=1
+DATABASE_URL="postgresql://rapidpro_user:rapidpro_pass@localhost/rapidpro_db"
+REDIS_HOST=localhost
+REDIS_DATABASE=8
+TEMBA_HOST=192.168.60.2
+TEMBA_AUTH_TOKEN="xxxx"
+TWITTER_API_KEY="xxxx"
+TWITTER_API_SECRET="xxxx"
+TEMBA_NO_SSL=1
+SEGMENTIO_WRITE_KEY="false"
+SENTRY_DSN="false"
+LIBRATO_EMAIL="false"
+LIBRATO_API_TOKEN="false"
+```
+
 * `set -a && source ~/mage/environ.sh && set +a && java -jar ~/mage/mage.jar server ~/mage/config.yml`
-* Verifier "*Found 1 active Twitter channel(s)*" et "*Added Twitter stream for handle*"
-* `vim /etc/systemd/system/mage.service`
-* `systemctl status mage`
-* `systemctl daemon-reload`
-* `systemctl enable mage`
-* `systemctl start mage`
-* `systemctl start celery`
-* `systemctl start celerybeat`
+* Check mage output to find “*Found 1 active Twitter channel(s)*” et “*Added Twitter stream for handle*”
+
+### Create mage startup (as `root`)
+* Create file `vim /etc/systemd/system/mage.service`
+
+``` ini
+[Unit]
+Description=mage Twitter service
+
+[Service]
+Type=simple
+User=rapidpro
+Group=www-data
+WorkingDirectory=/home/rapidpro/mage
+EnvironmentFile=/home/rapidpro/mage/environ.sh
+
+ExecStart=/bin/sh -c "exec java -jar /home/rapidpro/mage/mage.jar server /home/rapidpro/mage/config.yml"
+
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+
+``` sh
+systemctl status mage
+systemctl daemon-reload
+systemctl enable mage
+systemctl start mage
+systemctl start celery
+systemctl start celerybeat
+```
 
 ## Facebook Channel
 
-### https valide
-* Créer tunnel ssh aigri.ml:800X -> 192.168.60.2:443
-* Configurer aigri.ml + certificat dans nginx
-* Tester https://aigril.ml:800X/
+Facebook requires your callback to be on a genuine SSL certificate (actual domain, not self-signed, major authority).
+
+### Genuine SSL Certificate (on a private network)
+
+* Create a tunnel from host computer to gateway public server targeting VM's 443
+* `ssh user@gatewayserver -R localhost:8000:192.168.60.2:80`
+* Configure nginx for public domain name
+
+``` nginx
+    server_name 192.168.60.2 pubdomain.com;
+    
+    ssl_certificate      /etc/ssl/certs/pubdomain.com/fullchain.pem;
+    ssl_certificate_key  /etc/ssl/certs/pubdomain.com/privkey.pem;
+```
+* Test it on https://pubdomain.com:8000/
 
 ### Facebook
-* Créer une application depuis https://developer.facebook.com/
-* Section *Messenger*
-* Cocher `pages_messaging`, `pages_messaging_subscriptions`
-* Sélectionner une page
-* `Generate Token`
+* Create an Application at https://developer.facebook.com/ (type *Messenger App*)
+* Go to section *Messenger*
+* Select your page and generate Token
+* Subscribe your page to *Messenger*
+* Add `pages_messaging` and `pages_messaging_subscriptions`. `pages_messaging_phone_number` is optionnal.
 
 ### RapidPro
-* Créer Channel depuis http://192.168.60.2/channels/channel/claim_facebook/
-* Copier le token et authoriser
-* `Add Webhook`, indiquer le callback (https) et tout cocher
-* Modifier les paramètres de la page: activer messenger et instant-answer
+* Create Channel from https://pubdomain.com:8000/channels/channel/claim_facebook/
+* Copy the token from your application
+* Add Webhook and indicate callback (tick everything)
+* Edit the Facebook Page settings to enable messenger: “Instant answer” settings indicate it's a bot.
+* Test using one of the Page's admin account.
+* Submit your app to Facebook from Application page (tick `pages_messaging` and `pages_messaging_subscriptions`)
 
-## Update RapidPro
 
-### Backup DB
+# Updating the codebase
+
+RapidPro is an active project with continuous updates: new features, bug and security fixes. It is recommended to update frequently.
+
+## Take it down
+
+``` sh
+systemctl stop rapidpro
+systemctl stop celery
+systemctl stop celerybeat
+systemctl stop mage
+systemctl stop redis-server
 ```
-su - postgres -c "pg_dump -C > /home/rapidpro/rapidpro-dump.sql"
+
+## Backup database
+
+``` sh
+su - postgres -c "pg_dump -C rapidpro > /tmp/rapidpro-dump.sql"
 ```
-### Update temba code
-```
-git clone https://github.com/rapidpro/rapidpro.git ~/src/temba-`date +"%s"` --depth 1
-ln -sf src/temba* ~/temba
-cd ~/temba
+
+## Get the latest code (as `rapidpro` user)
+
+**Note**: Change `rapidpro-XXX` with the latest version.
+
+``` sh
+git clone https://github.com/rapidpro/rapidpro.git ~/src/rapidpro-`date +"%s"` --depth 1
+ln -sf ~/src/rapidpro-XXX ~/app
+ln -sf ~/settings.py ~/app/temba/settings.py
 pip install -r pip-freeze.txt --allow-all-external
+pip install -U pip
+pip install -U setuptools
+pip install -U uwsgi
 ./manage.py migrate --noinput
 ./manage.py collectstatic --noinput
 ```
 
-`systemctl restart rapidpro`
+## Restart (as `root`)
 
-### Rollback (if issues)
-
-#### Restore previous Code
-```
-ls -lt ~/src/
-ln -sf src/temba-xxxx ~/temba
-pip install -r pip-freeze.txt --allow-all-external
-./manage.py collectstatic --noinput
-```
-
-#### Restore DB
-```
-systemctl stop mage
-systemctl stop celery
-systemctl stop celerybeat
-systemctl stop rapidpro
-su - postgres -c "psql -c \"DROP DATABASE rapidpro;\""
-su - postgres -c "psql --set ON_ERROR_STOP=on < /home/rapidpro/rapidpro-dump.sql"
-systemctl start mage
+``` sh
+systemctl start redis-server
 systemctl start celery
 systemctl start celerybeat
 systemctl start rapidpro
+systemctl start mage
 ```
+
+* Test the system, include async tasks like messages and channels.
+
+## Rollback (if it's not working)
+
+Potential problems:
+
+* Unable to install new pip requirements.
+* Pip requirements brought new dependencies that can't be installed.
+* Migrations failed to apply.
+* Missing/changed settings prevent RapidPro from working correctly.
+
+Check [developers list](https://groups.google.com/forum/#!forum/rapidpro-dev) to find out and get advices.
+
+``` sh
+systemctl stop rapidpro
+systemctl stop celery
+systemctl stop celerybeat
+systemctl stop mage
+systemctl stop redis-server
+```
+
+### Restore database dump
+
+Only if you applied at least one migration (even if it failed) during the update. Skip if there was no new migration or if it failed before that step.
+
+``` sh
+su - postgres -c "psql -c 'DROP DATABASE rapidpro_db;'"
+su - postgres -c "psql --set ON_ERROR_STOP=on < /tmp/rapidpro-dump.sql"
+```
+
+### Rollback code (as `rapidpro` user)
+
+**Note**: Change `rapidpro-XXX` to the latest working version. Use `ls -lt ~/src/` to find it.
+
+``` sh
+ln -sf ~/src/rapidpro-XXX ~/app
+ln -sf ~/settings.py ~/app/temba/settings.py
+pip install -r pip-freeze.txt --allow-all-external
+pip install -U pip
+pip install -U setuptools
+pip install -U uwsgi
+./manage.py migrate --noinput
+./manage.py collectstatic --noinput
+```
+
+### Restart (as `root`)
+
+``` sh
+systemctl start redis-server
+systemctl start celery
+systemctl start celerybeat
+systemctl start rapidpro
+systemctl start
 
