@@ -15,6 +15,7 @@ Assumptions:
 
 ``` sh
 apt install postgresql-9.4 postgresql-9.4-postgis-2.1
+# apt install postgresql-9.5 postgresql-9.5-postgis-2.2
 ```
 
 ``` sh
@@ -22,7 +23,7 @@ sudo su - postgres
 psql -c "CREATE USER rapidpro_user WITH PASSWORD 'rapidpro_pass';"
 psql -c "CREATE DATABASE rapidpro_db;"
 psql -c "GRANT CREATE,CONNECT,TEMP ON DATABASE rapidpro_db to rapidpro_user;"
-psql -d rapidpro_db -c "CREATE EXTENSION postgis; CREATE EXTENSION postgis_topology; CREATE EXTENSION hstore;"
+psql -d rapidpro_db -c 'CREATE EXTENSION postgis; CREATE EXTENSION postgis_topology; CREATE EXTENSION hstore; CREATE EXTENSION "uuid-ossp";'
 ```
 
 ## redis (as `root`)
@@ -68,7 +69,7 @@ server {
     }
 
     location /media  {
-        # alias /home/rapidpro/media;
+        # alias /home/rapidpro/app/media;
     }
 
     location / {
@@ -121,7 +122,7 @@ server {
     }
 
     location /media  {
-        # alias /home/rapidpro/media;
+        # alias /home/rapidpro/app/media;
     }
 
     location / {
@@ -161,7 +162,8 @@ apt install python2.7-dev python-virtualenv python-pip python-lxml libpq-dev pyt
 apt install npm nodejs
 npm install -g less coffee-script bower
 ln -s /usr/bin/nodejs /usr/bin/node
-create user useradd -g www-data -m -N -s /bin/bash rapidpro
+# create user
+useradd -g www-data -m -N -s /bin/bash rapidpro
 ```
 
 ## temba as `rapidpro` user
@@ -203,7 +205,7 @@ ALLOWED_HOSTS = [HOSTNAME, 'localhost', '127.0.0.1', 'rapidpro']
 
 STATIC_ROOT = "/home/rapidpro/sitestatic"
 COMPRESS_ROOT = STATIC_ROOT
-MEDIA_ROOT = "/home/rapidpro/media"
+MEDIA_ROOT = "/home/rapidpro/app/media"  # must be *inside* temba
 
 USER_TIME_ZONE = 'Africa/Tunis'
 LANGUAGE_CODE = 'fr-fr'
@@ -213,9 +215,9 @@ DEFAULT_SMS_LANGUAGE = "fr-fr"
 SECRET_KEY = 'abcddaslkldk;lsakdl;akdl;'
 
 POSTGRES_HOST = "localhost"
-POSTGRES_USERNAME = "rapidpro"
-POSTGRES_PASSWORD = "rapidpro"
-POSTGRES_NAME = "rapidpro"
+POSTGRES_USERNAME = "rapidpro_user"
+POSTGRES_PASSWORD = "rapidpro_pass"
+POSTGRES_NAME = "rapidpro_db"
 
 REDIS_HOST = 'localhost'
 REDIS_PORT = 6379
@@ -509,7 +511,7 @@ systemctl status celery
 systemctl daemon-reload
 systemctl enable celery
 systemctl start celery
-systemctl status celerybeat
+systemctl status celery
 ```
 
 ## Twitter Channel
